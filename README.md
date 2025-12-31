@@ -29,11 +29,31 @@ hashmind combines fast heuristic detection with XGBoost classification to identi
 git clone https://github.com/supunhg/hashmind.git
 cd hashmind
 python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e .
 ```
 
 ## Usage
+
+### Command Line
+
+```bash
+# Basic identification
+hashmind 5d41402abc4b2a76b9719d911017c592
+# Output: md5_hex
+
+# Or use the short alias
+hmind 5d41402abc4b2a76b9719d911017c592
+
+# Show confidence scores
+hmind --confidence 5d41402abc4b2a76b9719d911017c592
+
+# Batch processing
+cat hashes.txt | hmind --batch
+
+# Verbose output
+hmind --verbose '$2a$10$N9qo8uLOickgx2ZMRZoMye'
+```
 
 ### Python API
 
@@ -52,16 +72,6 @@ from hashmind import decode_recursive
 result = decode_recursive("NWQ0MTQwMmFiYzRiMmE3NmI5NzE5ZDkxMTAxN2M1OTI=")
 print(result.final_value)  # Original hash
 print(result.get_chain())  # base64
-```
-
-### Command Line
-
-```bash
-python -m hashmind <hash> [--ml] [--verbose] [--decode]
-
-python -m hashmind 5d41402abc4b2a76b9719d911017c592 --ml
-python -m hashmind --decode "NWQ0MTQwMmFiYzRiMmE3NmI5NzE5ZDkxMTAxN2M1OTI="
-cat hashes.txt | python -m hashmind --batch --ml
 ```
 
 ## Supported Hash Types (60+)
