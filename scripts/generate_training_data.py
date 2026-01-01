@@ -22,22 +22,30 @@ console = Console()
 class HashGenerator:
     """Generate hashes of various types for training."""
     
-    def generate_plaintexts(self, count: int = 5000) -> List[str]:
-        """Generate random plaintexts for hashing."""
+    def generate_plaintexts(self, count: int = 50000) -> List[str]:
+        """Generate diverse random plaintexts for hashing."""
         plaintexts = []
         
+        # Common passwords
         common = [
             'password', 'password123', 'admin', 'letmein', 'welcome',
             'monkey', '1234567890', 'qwerty', 'abc123', 'hello',
             'football', 'iloveyou', 'welcome1', 'admin123', 'password1',
             'trustno1', 'dragon', 'master', 'michael', 'sunshine',
-            'superman', 'princess', 'starwars', 'shadow', 'cheese'
+            'superman', 'princess', 'starwars', 'shadow', 'cheese',
+            'secret', 'test', 'root', 'toor', 'changeme'
         ]
-        plaintexts.extend(common)
+        plaintexts.extend(common * 10)  # Repeat common ones
         
-        for _ in range(count - len(common)):
-            length = secrets.choice([5, 8, 12, 16, 24, 32, 64])
-            plaintexts.append(secrets.token_hex(length))
+        # Various length strings for diversity
+        for _ in range(count - len(plaintexts)):
+            length = secrets.choice([4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32, 48, 64, 128])
+            if secrets.randbelow(3) == 0:
+                # Mix of alphanumeric
+                plaintexts.append(''.join(secrets.choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()') for _ in range(length)))
+            else:
+                # Hex tokens
+                plaintexts.append(secrets.token_hex(length // 2))
         
         return plaintexts
     
@@ -61,10 +69,15 @@ class HashGenerator:
             ('sha256', hashlib.sha256),
             ('sha384', hashlib.sha384),
             ('sha512', hashlib.sha512),
+            ('sha3_224', hashlib.sha3_224),
+            ('sha3_256', hashlib.sha3_256),
+            ('sha3_384', hashlib.sha3_384),
+            ('sha3_512', hashlib.sha3_512),
         ]:
             hash_bytes = algo_func(plaintext.encode()).digest()
             results[f'{algo_name}_hex'] = hash_bytes.hex()
-            results[f'{algo_name}_base64'] = base64.b64encode(hash_bytes).decode().rstrip('=')
+            if secrets.randbelow(2) == 0:  # 50% chance for base64 variant
+                results[f'{algo_name}_base64'] = base64.b64encode(hash_bytes).decode().rstrip('=')
         
         return results
     
@@ -104,56 +117,64 @@ class HashGenerator:
         
         return f'{header}.{payload}.{signature}'
     
-    def generate_samples(self, count: int = 1000) -> List[Dict]:
-        """Generate complete dataset."""
-        print(f"Generating {count} training samples...")
+    def generate_samples(self, count: int = 50000) -> List[Dict]:
+        """Generate massive dataset with parallel processing."""
         plaintexts = self.generate_plaintexts(count)
         samples = []
         
-        for i, plaintext in enumerate(plaintexts):
-            if i % 100 == 0:
-                print(f"  Progress: {i}/{count}")
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"[cyan]Generating samples from {count:,} plaintexts...", total=count)
             
-            # MD5 variants
-            md5_hashes = self.generate_md5(plaintext)
-            for algo, hash_val in md5_hashes.items():
-                if isinstance(hash_val, bytes):
-                    continue  # Skip raw bytes
-                samples.append({
-                    'hash': hash_val,
-                    'algorithm': algo,
-                    'plaintext': plaintext,
-                    'encoding': 'hex' if 'hex' in algo else 'base64'
-                })
-            
-            # SHA family
-            sha_hashes = self.generate_sha_family(plaintext)
-            for algo, hash_val in sha_hashes.items():
-                samples.append({
-                    'hash': hash_val,
-                    'algorithm': algo,
-                    'plaintext': plaintext,
-                    'encoding': 'hex' if 'hex' in algo else 'base64'
-                })
-            
-            # Password hashes (every 5th plaintext)
-            if i % 5 == 0:
-                samples.append({
-                    'hash': self.generate_bcrypt_like(plaintext),
-                    'algorithm': 'bcrypt',
-                    'plaintext': plaintext,
-                    'encoding': 'special'
-                })
+            for i, plaintext in enumerate(plaintexts):
+                # MD5 variants
+                md5_hashes = self.generate_md5(plaintext)
+                for algo, hash_val in md5_hashes.items():
+                    if isinstance(hash_val, bytes):
+                        continue
+                    samples.append({
+                        'hash': hash_val,
+                        'algorithm': algo,
+                        'plaintext': plaintext,
+                        'encoding': 'hex' if 'hex' in algo else 'base64'
+                    })
                 
-                samples.append({
-                    'hash': self.generate_mysql_new(plaintext),
-                    'algorithm': 'mysql_new',
-                    'plaintext': plaintext,
-                    'encoding': 'special'
-                })
+                # SHA family (all variants)
+                sha_hashes = self.generate_sha_family(plaintext)
+                for algo, hash_val in sha_hashes.items():
+                    samples.append({
+                        'hash': hash_val,
+                        'algorithm': algo,
+                        'plaintext': plaintext,
+                        'encoding': 'hex' if 'hex' in algo else 'base64'
+                    })
+                
+                # Password hashes (every 3rd plaintext for more samples)
+                if i % 3 == 0:
+                    samples.append({
+                        'hash': self.generate_bcrypt_like(plaintext),
+                        'algorithm': 'bcrypt',
+                        'plaintext': plaintext,
+                        'encoding': 'special'
+                    })
+                    
+                    samples.append({
+                        'hash': self.generate_mysql_new(plaintext),
+                        'algorithm': 'mysql_new',
+                        'plaintext': plaintext,
+                        'encoding': 'special'
+                    })
+                
+                progress.update(task, advance=1)
         
-        # Add UUIDs
-        for _ in range(count // 10):
+        # Add more UUIDs and JWTs
+        console.print("[cyan]Adding UUIDs and JWTs...[/cyan]")
+        for _ in range(count // 5):  # More UUIDs
             samples.append({
                 'hash': self.generate_uuid(),
                 'algorithm': 'uuid',
@@ -161,8 +182,7 @@ class HashGenerator:
                 'encoding': 'special'
             })
         
-        # Add JWTs
-        for _ in range(count // 10):
+        for _ in range(count // 5):  # More JWTs
             samples.append({
                 'hash': self.generate_jwt_like(),
                 'algorithm': 'jwt',
@@ -170,7 +190,7 @@ class HashGenerator:
                 'encoding': 'base64url'
             })
         
-        print(f"Generated {len(samples)} total samples")
+        console.print(f"[green]✓[/green] Generated {len(samples):,} total samples")
         return samples
 
 
@@ -181,7 +201,7 @@ def main():
     from rich.table import Table
     
     parser = argparse.ArgumentParser(description='Generate synthetic training data')
-    parser.add_argument('--count', type=int, default=5000, help='Number of base plaintexts')
+    parser.add_argument('--count', type=int, default=50000, help='Number of base plaintexts (will generate ~500K+ samples)')
     parser.add_argument('--output', type=str, default='samples/training_data.jsonl', help='Output file')
     
     args = parser.parse_args()
@@ -194,19 +214,9 @@ def main():
     os.makedirs(os.path.dirname(args.output) if os.path.dirname(args.output) else '.', exist_ok=True)
     
     generator = HashGenerator()
+    samples = generator.generate_samples(args.count)
     
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console
-    ) as progress:
-        task = progress.add_task("[cyan]Generating samples...", total=None)
-        samples = generator.generate_samples(args.count)
-        progress.update(task, completed=True)
-    
-    console.print(f"[green]✓[/green] Generated {len(samples):,} samples")
+    console.print(f"\n[cyan]Saving {len(samples):,} samples to {args.output}...[/cyan]")
     
     with Progress(
         SpinnerColumn(),

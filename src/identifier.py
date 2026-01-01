@@ -61,7 +61,7 @@ _detector = None
 _feature_extractor = None
 
 # Cache for results (prevents recomputation)
-@functools.lru_cache(maxsize=1000)
+@functools.lru_cache(maxsize=4096)  # Increased cache size for better performance
 def _cached_identify(input_string: str, use_ml_flag: bool) -> tuple:
     """Cached version of identification (returns tuple for hashability)."""
     result = _identify_internal(input_string, use_ml=use_ml_flag)
@@ -198,34 +198,90 @@ def identify(input_string: str,
 
 def identify_batch(inputs: List[str], 
                    use_ml: bool = True,
-                   show_progress: bool = False) -> List[IdentificationResult]:
+                   show_progress: bool = False,
+                   use_cache: bool = True,
+                   parallel: bool = True) -> List[IdentificationResult]:
     """
     Identify multiple hashes efficiently.
     
-    Uses batch processing and caching for improved performance.
+    Uses batch processing, caching, and optional parallel execution for improved performance.
     
     Args:
         inputs: List of strings to identify
         use_ml: Whether to use ML classification
-        show_progress: Show progress bar (requires tqdm)
+        show_progress: Show progress bar (requires rich)
+        use_cache: Use result caching
+        parallel: Use parallel processing for large batches (>100 items)
         
     Returns:
         List of IdentificationResult objects
     """
+    if not inputs:
+        return []
+    
+    # For very large batches with parallel enabled, use parallel processing
+    if parallel and len(inputs) > 100:
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            import os
+            
+            max_workers = min(os.cpu_count() or 4, 8)
+            
+            if show_progress:
+                try:
+                    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+                    
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(),
+                        TextColumn("[progress.percentage]{task.percentage:>3.0f}%")
+                    ) as progress:
+                        task = progress.add_task(f"[cyan]Identifying {len(inputs):,} hashes...", total=len(inputs))
+                        
+                        results = []
+                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                            future_to_input = {executor.submit(identify, inp, use_ml=use_ml, use_cache=use_cache): inp for inp in inputs}
+                            for future in future_to_input:
+                                results.append(future.result())
+                                progress.update(task, advance=1)
+                        return results
+                except ImportError:
+                    pass
+            
+            # No progress bar
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                return list(executor.map(lambda x: identify(x, use_ml=use_ml, use_cache=use_cache), inputs))
+        except Exception:
+            pass  # Fall through to sequential
+    
+    # Sequential processing with optional progress
     results = []
     
     if show_progress:
         try:
-            from tqdm import tqdm
-            iterator = tqdm(inputs, desc="Identifying")
+            from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+            
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%")
+            ) as progress:
+                task = progress.add_task(f"[cyan]Identifying {len(inputs):,} hashes...", total=len(inputs))
+                for input_string in inputs:
+                    result = identify(input_string, use_ml=use_ml, use_cache=use_cache)
+                    results.append(result)
+                    progress.update(task, advance=1)
         except ImportError:
-            iterator = inputs
+            # Fallback without progress
+            for input_string in inputs:
+                result = identify(input_string, use_ml=use_ml, use_cache=use_cache)
+                results.append(result)
     else:
-        iterator = inputs
-    
-    for input_string in iterator:
-        result = identify(input_string, use_ml=use_ml, use_cache=True)
-        results.append(result)
+        for input_string in inputs:
+            result = identify(input_string, use_ml=use_ml, use_cache=use_cache)
+            results.append(result)
     
     return results
 

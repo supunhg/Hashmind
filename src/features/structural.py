@@ -2,7 +2,18 @@
 
 from typing import Dict, List, Any
 import math
+import re
+import zlib
 from collections import Counter
+import functools
+
+# Pre-compiled regex patterns for performance
+BASE64_PATTERN = re.compile(r'^[A-Za-z0-9+/]+=*$')
+HEX_PATTERN = re.compile(r'^[0-9a-fA-F]+$')
+BASE32_PATTERN = re.compile(r'^[A-Z2-7]+=*$')
+BASE64URL_PATTERN = re.compile(r'^[A-Za-z0-9_-]+$')
+UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+JWT_PATTERN = re.compile(r'^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$')
 
 
 class StructuralFeatures:
@@ -50,7 +61,7 @@ class StatisticalFeatures:
     
     @staticmethod
     def extract(input_string: str) -> Dict[str, float]:
-        """Extract statistical features."""
+        """Extract statistical features with optimized calculations."""
         if not input_string:
             return {
                 'entropy': 0.0,
@@ -63,26 +74,45 @@ class StatisticalFeatures:
             }
         
         length = len(input_string)
-        byte_values = [ord(c) for c in input_string]
-        counter = Counter(input_string)
         
+        # Single pass for character counting
+        byte_values = []
+        digit_count = 0
+        alpha_count = 0
+        counter = {}
+        
+        for c in input_string:
+            bval = ord(c)
+            byte_values.append(bval)
+            counter[c] = counter.get(c, 0) + 1
+            if c.isdigit():
+                digit_count += 1
+            elif c.isalpha():
+                alpha_count += 1
+        
+        # Statistical calculations
         mean_byte = sum(byte_values) / length
         variance = sum((b - mean_byte) ** 2 for b in byte_values) / length
-        
-        digit_count = sum(1 for c in input_string if c.isdigit())
-        alpha_count = sum(1 for c in input_string if c.isalpha())
         special_count = length - digit_count - alpha_count
         
+        # Entropy calculation (use cached)
+        entropy = _calculate_entropy(input_string)
+        
+        # Character frequency stats
+        freq_values = list(counter.values())
+        max_freq = max(freq_values)
+        min_freq = min(freq_values)
+        
         return {
-            'entropy': _calculate_entropy(input_string),
-            'normalized_entropy': _calculate_entropy(input_string) / 8.0 if length else 0,
+            'entropy': entropy,
+            'normalized_entropy': entropy / 8.0,
             'mean_byte_value': mean_byte,
             'variance': variance,
-            'std_dev': math.sqrt(variance),
+            'std_dev': variance ** 0.5,  # Faster than math.sqrt
             'unique_chars': len(counter),
             'unique_ratio': len(counter) / length,
-            'max_char_freq': max(counter.values()) / length,
-            'min_char_freq': min(counter.values()) / length,
+            'max_char_freq': max_freq / length,
+            'min_char_freq': min_freq / length,
             'digit_ratio': digit_count / length,
             'alpha_ratio': alpha_count / length,
             'special_ratio': special_count / length,
@@ -96,8 +126,7 @@ class AlgorithmicFeatures:
     @staticmethod
     def extract(input_string: str) -> Dict[str, Any]:
         """Extract algorithmic features."""
-        import re
-        
+        # Use compiled patterns for faster matching
         return {
             'is_valid_base64': _is_valid_base64(input_string),
             'is_valid_base32': _is_valid_base32(input_string),
@@ -107,8 +136,8 @@ class AlgorithmicFeatures:
             'padding_count': len(input_string) - len(input_string.rstrip('=')),
             'padding_ratio': (len(input_string) - len(input_string.rstrip('='))) / len(input_string) if input_string else 0,
             'compression_ratio': _compression_ratio(input_string),
-            'matches_uuid_pattern': bool(re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', input_string, re.I)),
-            'matches_jwt_pattern': bool(re.match(r'^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$', input_string)),
+            'matches_uuid_pattern': bool(UUID_PATTERN.match(input_string)),
+            'matches_jwt_pattern': bool(JWT_PATTERN.match(input_string)),
             'matches_bcrypt_pattern': input_string.startswith(('$2a$', '$2b$', '$2y$')),
             'matches_crypt_pattern': input_string.startswith('$') and input_string.count('$') >= 2,
             'has_hash_prefix': input_string.startswith(('$', '{', '0x')),
@@ -132,8 +161,9 @@ def _categorize_length(length: int) -> str:
         return '128+'
 
 
+@functools.lru_cache(maxsize=2048)
 def _calculate_entropy(s: str) -> float:
-    """Calculate Shannon entropy."""
+    """Calculate Shannon entropy (cached)."""
     if not s:
         return 0.0
     
@@ -150,26 +180,22 @@ def _calculate_entropy(s: str) -> float:
 
 def _is_valid_base64(s: str) -> bool:
     """Check if string is valid base64."""
-    import re
-    return bool(re.match(r'^[A-Za-z0-9+/]+=*$', s))
+    return bool(BASE64_PATTERN.match(s))
 
 
 def _is_valid_hex(s: str) -> bool:
     """Check if string is valid hex."""
-    import re
-    return bool(re.match(r'^[0-9a-fA-F]+$', s))
+    return bool(HEX_PATTERN.match(s))
 
 
 def _is_valid_base32(s: str) -> bool:
     """Check if string is valid base32."""
-    import re
-    return bool(re.match(r'^[A-Z2-7]+=*$', s))
+    return bool(BASE32_PATTERN.match(s))
 
 
 def _is_valid_base64url(s: str) -> bool:
     """Check if string is valid base64url (JWT variant)."""
-    import re
-    return bool(re.match(r'^[A-Za-z0-9_-]+$', s))
+    return bool(BASE64URL_PATTERN.match(s))
 
 
 def _bigram_diversity(s: str) -> float:
@@ -180,14 +206,14 @@ def _bigram_diversity(s: str) -> float:
     return len(set(bigrams)) / len(bigrams) if bigrams else 0.0
 
 
+@functools.lru_cache(maxsize=1024)
 def _compression_ratio(s: str) -> float:
-    """Calculate compression ratio using zlib."""
-    import zlib
+    """Calculate compression ratio using zlib (cached)."""
     try:
         original_size = len(s.encode('utf-8'))
         if original_size == 0:
             return 1.0
-        compressed_size = len(zlib.compress(s.encode('utf-8'), level=9))
+        compressed_size = len(zlib.compress(s.encode('utf-8'), level=6))  # Level 6 is faster, good enough
         return compressed_size / original_size
     except Exception:
         return 1.0

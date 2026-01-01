@@ -46,11 +46,11 @@ def load_training_data(filepath: str) -> Tuple[List[str], List[str]]:
     return hashes, labels
 
 
-def extract_features(hashes: List[str]) -> List[Dict]:
-    """Extract features from hash strings."""
+def extract_features(hashes: List[str]) -> Tuple[List[Dict], List[str]]:
+    """Extract features from hash strings with parallel processing, return feature names."""
     extractor = FeatureExtractor()
-    features = []
     
+    # Process in batches for efficiency
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -60,23 +60,35 @@ def extract_features(hashes: List[str]) -> List[Dict]:
     ) as progress:
         task = progress.add_task("[cyan]Extracting features...", total=len(hashes))
         
-        for hash_str in hashes:
-            features.append(extractor.extract(hash_str))
-            progress.update(task, advance=1)
+        batch_size = 1000
+        features = []
+        feature_names = None
+        
+        for i in range(0, len(hashes), batch_size):
+            batch = hashes[i:i+batch_size]
+            batch_features = extractor.extract_batch(batch)
+            features.extend(batch_features)
+            
+            # Get feature names from first batch
+            if feature_names is None and batch_features:
+                feature_names = list(batch_features[0].keys())
+            
+            progress.update(task, advance=len(batch))
     
     console.print(f"[green]✓[/green] Extracted features from {len(features):,} samples")
-    return features
+    return features, feature_names
 
 
-def train_model(features: List[Dict], labels: List[str], output_path: str):
-    """Train XGBoost model."""
+def train_model(features: List[Dict], labels: List[str], feature_names: List[str], output_path: str):
+    """Train XGBoost model with optimizations for large datasets."""
     try:
         import xgboost as xgb
         from sklearn.model_selection import train_test_split
         from sklearn.preprocessing import LabelEncoder
-        from sklearn.metrics import classification_report, accuracy_score
+        from sklearn.metrics import accuracy_score
         import numpy as np
         import pandas as pd
+        import gc
     except ImportError:
         console.print("[red]Error: Required ML libraries not installed.[/red]")
         console.print("Install with: pip install xgboost scikit-learn pandas numpy")
@@ -84,19 +96,34 @@ def train_model(features: List[Dict], labels: List[str], output_path: str):
     
     console.print("\n[cyan]Preparing data for training...[/cyan]")
     
+    # Convert to DataFrame with memory optimization
     df = pd.DataFrame(features)
+    del features  # Free memory
+    gc.collect()
+    
     label_encoder = LabelEncoder()
     y = label_encoder.fit_transform(labels)
+    del labels  # Free memory
+    gc.collect()
     
+    # Optimize data types
     for col in df.columns:
         if df[col].dtype == bool:
-            df[col] = df[col].astype(int)
+            df[col] = df[col].astype('int8')
         elif df[col].dtype == object:
-            df[col] = pd.Categorical(df[col]).codes
+            df[col] = pd.Categorical(df[col]).codes.astype('int16')
+        elif df[col].dtype == 'float64':
+            df[col] = df[col].astype('float32')
+        elif df[col].dtype == 'int64':
+            df[col] = df[col].astype('int32')
     
     X = df.values
+    del df  # Free memory
+    gc.collect()
+    
+    # Stratified split
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X, y, test_size=0.15, random_state=42, stratify=y  # Use less test data for more training
     )
     
     table = Table(show_header=False, box=box.ROUNDED)
@@ -106,20 +133,28 @@ def train_model(features: List[Dict], labels: List[str], output_path: str):
     table.add_row("Classes", f"{len(label_encoder.classes_)}")
     console.print(table)
     
-    console.print("\n[cyan]Training XGBoost model...[/cyan]")
+    console.print("\n[cyan]Training XGBoost model with advanced hyperparameters...[/cyan]")
     
     model = xgb.XGBClassifier(
         objective='multi:softprob',
         num_class=len(label_encoder.classes_),
-        max_depth=8,
-        learning_rate=0.1,
-        n_estimators=100,
-        subsample=0.8,
-        colsample_bytree=0.8,
+        max_depth=12,               # Deeper trees for complex patterns
+        learning_rate=0.03,          # Lower learning rate
+        n_estimators=300,            # More trees for better ensemble
+        subsample=0.9,               # Higher subsample
+        colsample_bytree=0.9,        # Higher feature sampling
+        colsample_bylevel=0.9,       # Per-level sampling
+        min_child_weight=1,          # Allow finer splits
+        gamma=0.05,                  # Regularization
+        reg_alpha=0.005,             # L1 regularization
+        reg_lambda=1.5,              # L2 regularization
         random_state=42,
         eval_metric='mlogloss',
-        early_stopping_rounds=10,
-        verbosity=0
+        early_stopping_rounds=20,    # More patience
+        tree_method='hist',          # Histogram-based (fastest)
+        max_bin=256,                 # More bins for better splits
+        verbosity=0,
+        n_jobs=-1                    # Use all cores
     )
     
     model.fit(
@@ -139,23 +174,28 @@ def train_model(features: List[Dict], labels: List[str], output_path: str):
     
     os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
     
+    # Get feature names from first features dict
+    console.print(f"[cyan]Saving model...[/cyan]")
+    
     model_data = {
         'model': model,
         'label_encoder': label_encoder,
-        'feature_names': list(df.columns),
+        'feature_names': feature_names,
         'accuracy': accuracy,
         'n_features': X.shape[1],
         'n_classes': len(label_encoder.classes_),
+        'training_samples': len(X_train),
     }
     
     with open(output_path, 'wb') as f:
-        pickle.dump(model_data, f)
+        pickle.dump(model_data, f, protocol=4)  # Use protocol 4 for large objects
     
     console.print(f"[green]✓[/green] Model saved to {output_path}")
     
-    console.print("\n[cyan]Top 10 Feature Importance:[/cyan]")
+    # Feature importance (top 15)
+    console.print("\n[cyan]Top 15 Feature Importance:[/cyan]")
     feature_importance = pd.DataFrame({
-        'feature': df.columns,
+        'feature': feature_names,
         'importance': model.feature_importances_
     }).sort_values('importance', ascending=False)
     
@@ -163,7 +203,7 @@ def train_model(features: List[Dict], labels: List[str], output_path: str):
     imp_table.add_column("Feature", style="cyan")
     imp_table.add_column("Importance", justify="right", style="green")
     
-    for idx, row in feature_importance.head(10).iterrows():
+    for idx, row in feature_importance.head(15).iterrows():
         imp_table.add_row(row['feature'], f"{row['importance']:.4f}")
     
     console.print(imp_table)
@@ -197,8 +237,8 @@ def main():
     label_counts = Counter(labels)
     console.print(f"\n[cyan]Dataset:[/cyan] {len(hashes):,} samples across {len(label_counts)} algorithms")
     
-    features = extract_features(hashes)
-    train_model(features, labels, args.output)
+    features, feature_names = extract_features(hashes)
+    train_model(features, labels, feature_names, args.output)
     
     console.print(Panel.fit(
         "[bold green]✓ Training Complete![/bold green]",

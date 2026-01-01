@@ -112,7 +112,50 @@ class MLClassifier:
         Returns:
             List of prediction lists
         """
-        return [self.predict(f) for f in features_batch]
+        if not self._loaded:
+            self.load_model()
+        
+        if not features_batch:
+            return []
+        
+        import pandas as pd
+        import numpy as np
+        
+        # Convert all features to DataFrame at once (much faster)
+        df = pd.DataFrame(features_batch)
+        
+        # Ensure all expected features are present
+        for fname in self.feature_names:
+            if fname not in df.columns:
+                df[fname] = 0
+        
+        # Reorder columns to match training
+        df = df[self.feature_names]
+        
+        # Convert boolean and categorical features
+        for col in df.columns:
+            if df[col].dtype == bool:
+                df[col] = df[col].astype(int)
+            elif df[col].dtype == object:
+                df[col] = pd.Categorical(df[col]).codes
+        
+        # Predict all at once
+        proba_batch = self.model.predict_proba(df.values)
+        
+        # Create result lists
+        all_results = []
+        for proba in proba_batch:
+            results = []
+            for idx, prob in enumerate(proba):
+                if prob > 0.01:  # Only include predictions > 1%
+                    results.append({
+                        'algorithm': self.label_encoder.classes_[idx],
+                        'probability': float(prob)
+                    })
+            results.sort(key=lambda x: x['probability'], reverse=True)
+            all_results.append(results)
+        
+        return all_results
     
     def is_available(self) -> bool:
         """Check if model is available."""

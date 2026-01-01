@@ -1,6 +1,6 @@
 """hashmind - The intelligent hash identifier."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Supun Hewagamage"
 __description__ = "Intelligent hash/format identification system combining heuristics and ML"
 

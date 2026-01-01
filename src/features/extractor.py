@@ -49,7 +49,7 @@ class FeatureExtractor:
     
     def extract_batch(self, input_strings: list) -> list:
         """
-        Extract features for multiple strings.
+        Extract features for multiple strings with optional parallel processing.
         
         Args:
             input_strings: List of strings
@@ -57,4 +57,18 @@ class FeatureExtractor:
         Returns:
             List of feature dictionaries
         """
-        return [self.extract(s) for s in input_strings]
+        # For small batches, sequential is faster due to overhead
+        if len(input_strings) < 50:
+            return [self.extract(s) for s in input_strings]
+        
+        # For large batches, use parallel processing
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            import os
+            
+            max_workers = min(os.cpu_count() or 4, 8)  # Cap at 8 threads
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                return list(executor.map(self.extract, input_strings))
+        except Exception:
+            # Fallback to sequential if parallel fails
+            return [self.extract(s) for s in input_strings]

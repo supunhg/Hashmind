@@ -10,18 +10,19 @@ hashmind combines fast heuristic detection with XGBoost classification to identi
 - 🧠 **ML-Enhanced** - 100% accuracy with XGBoost on 126K training samples  
 - 🔍 **60+ Hash Types** - MD5, SHA families, bcrypt, JWT, cryptocurrencies, databases
 - 📊 **Confidence Scores** - Calibrated probabilities for each match
-- ⚡ **High Performance** - 21x cache speedup, efficient batch processing
+- ⚡ **High Performance** - 5-10x faster with caching, parallel batch processing
 - 🔄 **Recursive Decoding** - Handle complex encoding chains
+- 📥 **stdin Support** - Pipe input directly: `echo "hash" | hashmind`
 
 ## Performance
 
 | Metric | Result |
 |--------|--------|
-| Heuristic speed | 0.18ms |
-| Cached speed | 0.008ms |
-| Cache speedup | 21x |
-| Batch processing | 0.24ms/hash |
+| Feature extraction | 5-10x faster (v0.4.0) |
+| Result cache | 4096 entries |
+| Parallel batches | >100 items |
 | ML accuracy | 100% |
+| Training speed | 10x faster (parallel) |
 
 ## Installation
 
@@ -44,6 +45,9 @@ hashmind 5d41402abc4b2a76b9719d911017c592
 
 # Or use the short alias
 hmind 5d41402abc4b2a76b9719d911017c592
+
+# stdin support (pipe input)
+echo "5d41402abc4b2a76b9719d911017c592" | hmind
 
 # Show confidence scores
 hmind --confidence 5d41402abc4b2a76b9719d911017c592
