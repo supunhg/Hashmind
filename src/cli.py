@@ -26,6 +26,8 @@ def main(args: Optional[list] = None) -> int:
                '  hmind -c "$hash"              # show confidence\n'
                '  hmind -C "$hash"              # crack hash\n'
                '  hmind -C -w rockyou.txt "$hash"\n'
+               '  hmind -C -r best64.rule "$hash"   # with rules\n'
+               '  hmind -C -d 1 "$hash"         # use GPU 1\n'
                '  hmind -T                      # check tools\n'
                '  cat hashes.txt | hmind -b',
         formatter_class=argparse.RawDescriptionHelpFormatter
@@ -68,10 +70,28 @@ def main(args: Optional[list] = None) -> int:
     )
     
     parser.add_argument(
+        '-r', '--rules',
+        type=str,
+        help='Path to hashcat rules file (optional)'
+    )
+    
+    parser.add_argument(
+        '-d', '--device',
+        type=str,
+        help='GPU device selection for hashcat (e.g., "1" or "1,2")'
+    )
+    
+    parser.add_argument(
         '-t', '--max-time',
         type=int,
         default=300,
         help='Maximum cracking time in seconds (default: 300)'
+    )
+    
+    parser.add_argument(
+        '--no-cache',
+        action='store_true',
+        help='Disable crack result caching'
     )
     
     parser.add_argument(
@@ -201,7 +221,10 @@ def crack_mode(hash_value: str, hash_type: Optional[str], args) -> int:
         hash_value,
         hash_type,
         wordlist=args.wordlist,
-        max_time=args.max_time
+        max_time=args.max_time,
+        use_cache=not args.no_cache,
+        rules_file=args.rules if hasattr(args, 'rules') else None,
+        device=args.device if hasattr(args, 'device') else None
     )
     
     if result.success:
