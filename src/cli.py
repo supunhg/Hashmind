@@ -5,6 +5,7 @@ import sys
 import argparse
 from typing import Optional
 from . import identify, __version__
+from .cracker import crack_hash, HashCracker
 
 
 def main(args: Optional[list] = None) -> int:
@@ -19,11 +20,14 @@ def main(args: Optional[list] = None) -> int:
     """
     parser = argparse.ArgumentParser(
         prog='hmind',
-        description='Intelligent hash and format identification',
+        description='🔐 Intelligent hash identification and cracking system',
         epilog='Examples:\n'
                '  hmind 5d41402abc4b2a76b9719d911017c592\n'
-               '  hmind --confidence "$hash"\n'
-               '  cat hashes.txt | hmind --batch',
+               '  hmind -c "$hash"              # show confidence\n'
+               '  hmind -C "$hash"              # crack hash\n'
+               '  hmind -C -w rockyou.txt "$hash"\n'
+               '  hmind -T                      # check tools\n'
+               '  cat hashes.txt | hmind -b',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
@@ -52,12 +56,41 @@ def main(args: Optional[list] = None) -> int:
     )
     
     parser.add_argument(
+        '-C', '--crack',
+        action='store_true',
+        help='Attempt to crack the hash (requires hashcat or john)'
+    )
+    
+    parser.add_argument(
+        '-w', '--wordlist',
+        type=str,
+        help='Path to wordlist for cracking (optional)'
+    )
+    
+    parser.add_argument(
+        '-t', '--max-time',
+        type=int,
+        default=300,
+        help='Maximum cracking time in seconds (default: 300)'
+    )
+    
+    parser.add_argument(
+        '-T', '--check-tools',
+        action='store_true',
+        help='Check availability of cracking tools'
+    )
+    
+    parser.add_argument(
         '--version',
         action='version',
         version=f'%(prog)s {__version__}'
     )
     
     parsed_args = parser.parse_args(args)
+    
+    # Check tools availability
+    if parsed_args.check_tools:
+        return check_cracking_tools()
     
     # Handle batch mode
     if parsed_args.batch:
@@ -76,6 +109,11 @@ def main(args: Optional[list] = None) -> int:
     try:
         result = identify(input_string)
         
+        # Cracking mode
+        if parsed_args.crack:
+            return crack_mode(input_string, result.top_match(), parsed_args)
+        
+        # Display results
         if parsed_args.verbose:
             print(result)
             print(f"\nMetadata:")
@@ -100,6 +138,76 @@ def main(args: Optional[list] = None) -> int:
     
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def check_cracking_tools() -> int:
+    """Check and display availability of cracking tools."""
+    from rich.console import Console
+    from rich.table import Table
+    from rich import box
+    
+    console = Console()
+    cracker = HashCracker()
+    available = cracker.is_available()
+    
+    table = Table(title="Cracking Tools", box=box.SIMPLE, show_header=True, header_style="bold")
+    table.add_column("Tool")
+    table.add_column("Status")
+    table.add_column("Path", style="dim")
+    
+    table.add_row(
+        "hashcat",
+        "[green]✓[/green] Available" if available['hashcat'] else "[red]✗[/red] Not Found",
+        cracker.hashcat_path or "N/A"
+    )
+    table.add_row(
+        "john",
+        "[green]✓[/green] Available" if available['john'] else "[red]✗[/red] Not Found",
+        cracker.john_path or "N/A"
+    )
+    
+    console.print(table)
+    
+    if not any(available.values()):
+        console.print("\n[yellow]Note:[/yellow] Install hashcat or john the ripper for cracking support.")
+    
+    return 0
+
+
+def crack_mode(hash_value: str, hash_type: Optional[str], args) -> int:
+    """
+    Handle hash cracking mode.
+    
+    Args:
+        hash_value: Hash to crack
+        hash_type: Detected hash type
+        args: CLI arguments
+        
+    Returns:
+        Exit code
+    """
+    from rich.console import Console
+    
+    console = Console()
+    
+    if not hash_type:
+        console.print("[red]✗ Could not identify hash type. Cannot crack.[/red]")
+        return 1
+    
+    console.print(f"[cyan]Identified hash type:[/cyan] {hash_type}\n")
+    
+    result = crack_hash(
+        hash_value,
+        hash_type,
+        wordlist=args.wordlist,
+        max_time=args.max_time
+    )
+    
+    if result.success:
+        return 0
+    else:
+        console.print(f"[red]✗ Cracking failed:[/red] {result.error}")
         return 1
 
 

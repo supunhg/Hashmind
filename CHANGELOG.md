@@ -2,6 +2,40 @@
 
 All notable changes to hashmind.
 
+## [0.4.1] - 2026-01-21
+
+### 🔓 Hash Cracking Feature (Major Addition)
+- **Integrated Hash Cracking**: Full hashcat and john the ripper integration
+- **Auto-Detection**: Automatically identifies hash type before cracking
+- **Smart Mode Mapping**: Auto-maps detected hashes to hashcat/john modes
+- **Retro UI**: Beautiful ASCII art banners and progress bars for cracking operations
+- **Wordlist Management**: Auto-detects common wordlists (rockyou.txt, etc.)
+- **Fallback Wordlist**: Built-in common passwords if no wordlist found
+
+### CLI Enhancements
+- `--crack`: Attempt to crack identified hash
+- `--wordlist`: Specify custom wordlist path
+- `--max-time`: Set cracking timeout (default: 300s)
+- `--check-tools`: Verify hashcat/john installation
+- Improved help text and examples
+
+### Python API
+- `crack_hash()`: Convenience function for hash cracking
+- `HashCracker`: Full-featured cracking class
+- `CrackResult`: Structured result object with success/plaintext/timing
+
+### UX Improvements
+- Clean, professional output formatting
+- Minimal progress indicators
+- Status messages with checkmarks (✓/✗)
+- Simple table layouts
+
+### Technical
+- Subprocess wrapper for hashcat/john
+- Thread-safe temp file management in `~/.hashmind/cracking/`
+- Graceful degradation if tools not installed
+- Result parsing for both hashcat and john formats
+
 ## [0.4.0] - 2026-01-01
 
 ### Performance Improvements

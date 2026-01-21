@@ -268,6 +268,12 @@ class RegexEngine:
         """
         matches = []
         
+        # PRIORITY CHECK: If it's pure hex, mark it as hex with high confidence
+        # This prevents misidentification as base64url
+        is_pure_hex = bool(self.PATTERNS['hex'].match(input_string))
+        has_uppercase_hex = any(c in 'ABCDEF' for c in input_string)
+        has_lowercase_hex = any(c in 'abcdef' for c in input_string)
+        
         for pattern_name, pattern in self.PATTERNS.items():
             if pattern.match(input_string):
                 # Adjust confidence based on pattern specificity
@@ -275,8 +281,17 @@ class RegexEngine:
                     confidence = 0.85
                 elif pattern_name in ['windows_sid', 'jwt_header', 'mac_address']:
                     confidence = 0.90
-                elif pattern_name in ['hex', 'base64', 'base32']:
-                    confidence = 0.4  # Very generic
+                elif pattern_name == 'hex' and is_pure_hex:
+                    # Boost hex confidence when it's clearly hex
+                    confidence = 0.75
+                elif pattern_name == 'base64url' and is_pure_hex:
+                    # Heavily penalize base64url if it's actually hex
+                    if not has_uppercase_hex or not has_lowercase_hex:
+                        # Skip this match - likely hex, not base64url
+                        continue
+                    confidence = 0.2
+                elif pattern_name in ['hex', 'base64', 'base32', 'base64url']:
+                    confidence = 0.4  # Generic patterns
                 else:
                     confidence = 0.6
                     

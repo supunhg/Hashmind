@@ -1,14 +1,15 @@
 # hashmind
 
-**Intelligent hash and format identification using machine learning**
+**Intelligent hash identification and cracking using machine learning**
 
-hashmind combines fast heuristic detection with XGBoost classification to identify 60+ hash types, cryptographic algorithms, and encoded formats with high accuracy.
+hashmind combines fast heuristic detection with XGBoost classification to identify 60+ hash types, cryptographic algorithms, and encoded formats with high accuracy. Now with integrated hash cracking capabilities!
 
 ## Features
 
 - 🚀 **Fast Detection** - Sub-millisecond identification (0.18ms average)
 - 🧠 **ML-Enhanced** - 100% accuracy with XGBoost on 126K training samples  
 - 🔍 **60+ Hash Types** - MD5, SHA families, bcrypt, JWT, cryptocurrencies, databases
+- 🔓 **Hash Cracking** - Integrated hashcat/john the ripper support (NEW in v0.4.1!)
 - 📊 **Confidence Scores** - Calibrated probabilities for each match
 - ⚡ **High Performance** - 5-10x faster with caching, parallel batch processing
 - 🔄 **Recursive Decoding** - Handle complex encoding chains
@@ -36,6 +37,18 @@ pip install -e .
 
 ## Usage
 
+### Quick Reference
+
+| Short | Long | Description |
+|-------|------|-------------|
+| `-c` | `--confidence` | Show confidence scores |
+| `-v` | `--verbose` | Detailed analysis with metadata |
+| `-b` | `--batch` | Process multiple inputs from stdin |
+| `-C` | `--crack` | Attempt to crack the hash |
+| `-w` | `--wordlist` | Custom wordlist path |
+| `-t` | `--max-time` | Maximum cracking time (seconds) |
+| `-T` | `--check-tools` | Verify hashcat/john installation |
+
 ### Command Line
 
 ```bash
@@ -50,13 +63,22 @@ hmind 5d41402abc4b2a76b9719d911017c592
 echo "5d41402abc4b2a76b9719d911017c592" | hmind
 
 # Show confidence scores
-hmind --confidence 5d41402abc4b2a76b9719d911017c592
+hmind -c 5d41402abc4b2a76b9719d911017c592
+
+# Hash cracking (NEW!)
+hmind -C 5d41402abc4b2a76b9719d911017c592
+
+# Crack with custom wordlist and timeout
+hmind -C -w /path/to/rockyou.txt -t 60 "$hash"
+
+# Check cracking tools availability
+hmind -T
 
 # Batch processing
-cat hashes.txt | hmind --batch
+cat hashes.txt | hmind -b
 
 # Verbose output
-hmind --verbose '$2a$10$N9qo8uLOickgx2ZMRZoMye'
+hmind -v '$2a$10$N9qo8uLOickgx2ZMRZoMye'
 ```
 
 ### Python API
@@ -76,6 +98,24 @@ from hashmind import decode_recursive
 result = decode_recursive("NWQ0MTQwMmFiYzRiMmE3NmI5NzE5ZDkxMTAxN2M1OTI=")
 print(result.final_value)  # Original hash
 print(result.get_chain())  # base64
+
+# Hash cracking (NEW in v0.4.1!)
+from hashmind import crack_hash
+
+result = crack_hash("5d41402abc4b2a76b9719d911017c592")
+if result.success:
+    print(f"Cracked: {result.plaintext}")
+    print(f"Time: {result.time_taken:.2f}s")
+    print(f"Method: {result.method}")
+else:
+    print(f"Failed: {result.error}")
+
+# With custom wordlist
+result = crack_hash(
+    "hash_value",
+    wordlist="/path/to/rockyou.txt",
+    max_time=600
+)
 ```
 
 ## Supported Hash Types (60+)

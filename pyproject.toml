@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hashmind"
-version = "0.4.0"
-description = "Intelligent hash/format identification system combining heuristics and ML"
+version = "0.4.1"
+description = "Intelligent hash/format identification and cracking system combining heuristics and ML"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
