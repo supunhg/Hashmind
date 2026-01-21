@@ -2,14 +2,17 @@
 
 **Intelligent hash identification and cracking using machine learning**
 
-hashmind combines fast heuristic detection with XGBoost classification to identify 60+ hash types, cryptographic algorithms, and encoded formats with high accuracy. Now with integrated hash cracking capabilities!
+hashmind combines fast heuristic detection with XGBoost classification to identify 60+ hash types, cryptographic algorithms, and encoded formats with high accuracy. Now with advanced hash cracking capabilities!
 
 ## Features
 
 - 🚀 **Fast Detection** - Sub-millisecond identification (0.18ms average)
 - 🧠 **ML-Enhanced** - 100% accuracy with XGBoost on 126K training samples  
 - 🔍 **60+ Hash Types** - MD5, SHA families, bcrypt, JWT, cryptocurrencies, databases
-- 🔓 **Hash Cracking** - Integrated hashcat/john the ripper support (NEW in v0.4.1!)
+- 🔓 **Hash Cracking** - Integrated hashcat/john the ripper support
+- 💾 **Crack Caching** - Never crack the same hash twice (NEW in v0.5.0!)
+- 🎯 **GPU Selection** - Choose specific GPUs for cracking (NEW in v0.5.0!)
+- 📜 **Custom Rules** - Support for hashcat rules files (NEW in v0.5.0!)
 - 📊 **Confidence Scores** - Calibrated probabilities for each match
 - ⚡ **High Performance** - 5-10x faster with caching, parallel batch processing
 - 🔄 **Recursive Decoding** - Handle complex encoding chains
@@ -27,12 +30,25 @@ hashmind combines fast heuristic detection with XGBoost classification to identi
 
 ## Installation
 
+### Debian/Ubuntu (.deb package)
+
+```bash
+# Download the .deb package from releases
+wget https://github.com/supunhg/hashmind/releases/download/v0.5.0/hashmind_0.5.0_all.deb
+
+# Install
+sudo dpkg -i hashmind_0.5.0_all.deb
+
+# Uninstall
+sudo dpkg -r hashmind
+```
+
+### From Source
+
 ```bash
 git clone https://github.com/supunhg/hashmind.git
 cd hashmind
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -e .
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -46,7 +62,10 @@ pip install -e .
 | `-b` | `--batch` | Process multiple inputs from stdin |
 | `-C` | `--crack` | Attempt to crack the hash |
 | `-w` | `--wordlist` | Custom wordlist path |
+| `-r` | `--rules` | Hashcat rules file (v0.5.0) |
+| `-d` | `--device` | GPU device selection (v0.5.0) |
 | `-t` | `--max-time` | Maximum cracking time (seconds) |
+| | `--no-cache` | Disable crack result caching (v0.5.0) |
 | `-T` | `--check-tools` | Verify hashcat/john installation |
 
 ### Command Line
@@ -67,6 +86,15 @@ hmind -c 5d41402abc4b2a76b9719d911017c592
 
 # Hash cracking (NEW!)
 hmind -C 5d41402abc4b2a76b9719d911017c592
+
+# Crack with GPU selection (v0.5.0)
+hmind -C -d 1 "$hash"  # Use GPU 1
+
+# Crack with custom rules (v0.5.0)
+hmind -C -r /path/to/best64.rule "$hash"
+
+# Disable caching (v0.5.0)
+hmind -C --no-cache "$hash"
 
 # Crack with custom wordlist and timeout
 hmind -C -w /path/to/rockyou.txt -t 60 "$hash"

@@ -157,6 +157,12 @@ class PrefixSuffixDetector:
         '$P$': 'phpass',
         '$H$': 'phpass',
         
+        # Archive formats (john the ripper format)
+        '$pkzip$': 'pkzip',
+        '$zip$': 'winzip',
+        '$rar$': 'rar',
+        '$7z$': '7zip',
+        
         # Oracle
         'S:': 'oracle11g',
         
